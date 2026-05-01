@@ -22,14 +22,19 @@ public class Worker : BackgroundService
     {
         try
         {
-            var token = _configuration["Discord:Token"]
-                ?? throw new InvalidOperationException("Discord token não configurado");
+            var token = _configuration["Discord:Token"];
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException(
+                    "Discord:Token is not configured. Set it in user secrets, environment variables, or appsettings before starting the bot.");
+            }
 
             _logger.LogInformation("A iniciar Discord Bot...");
 
             await _discordBotService.StartAsync(token, stoppingToken);
 
-            _logger.LogInformation("Discord Bot em execução");
+            _logger.LogInformation("Discord Bot em execucao");
 
             await Task.Delay(Timeout.Infinite, stoppingToken);
         }

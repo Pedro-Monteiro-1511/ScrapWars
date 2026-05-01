@@ -9,8 +9,13 @@ using ScrapWars.Worker;
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
-        var connectionString = context.Configuration.GetConnectionString("Supabase")
-            ?? throw new InvalidOperationException("ConnectionStrings:Supabase is not configured.");
+        var connectionString = context.Configuration.GetConnectionString("Supabase");
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "ConnectionStrings:Supabase is not configured. Set it in user secrets, environment variables, or appsettings before starting the bot.");
+        }
 
         services.AddSingleton<ApplicationCommandService<ApplicationCommandContext>>();
         services.AddDbContext<ScrapWarsDbContext>(options =>
