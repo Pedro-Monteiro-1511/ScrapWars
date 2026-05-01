@@ -1,32 +1,46 @@
 # ScrapWars
 
-ScrapWars is a Discord bot built with `.NET`, `NetCord`, `EF Core`, and `Supabase Postgres`.
+ScrapWars is a Discord-based price monitoring system built as a portfolio project around event-driven architecture in `.NET`.
 
-The bot is designed for multi-server use, with all data scoped by Discord guild. It lets each server organize tracked products by category, define which channels receive notifications for which categories, and enforce plan-based limits for categories, channels, and products.
+The project tracks products across multiple websites, stores price history, detects deals automatically, and routes notifications to Discord channels by category and guild.
 
-## What It Does
+## Why This Project Exists
 
-- Registers Discord slash commands with NetCord
-- Stores products per guild
-- Lets each guild create and manage categories
-- Maps notification channels to categories
-- Sends a `/help` response by private message
-- Supports guild subscription plans with add-on capacity
+This repository is meant to show:
 
-## Current Plans
+- practical multi-project `.NET` architecture
+- Discord slash-command integration with `NetCord`
+- message-driven workflows with `RabbitMQ`
+- scraping with `Playwright`
+- persistence with `EF Core` and `PostgreSQL`
+- separation of concerns between command handling, scraping, analysis, and notifications
 
-- `Base / Free`: 2 channels, 2 categories, 5 products
-- `Pro`: 5 channels, 3 categories, 10 products
-- `Max`: 10 channels, 6 categories, 15 products
-- Extra channel/category/product capacity: `0.99 EUR` each
+## Core Features
 
-## Main Commands
+- Guild-scoped product tracking
+- Category-based routing of notifications
+- Price scraping across multiple supported sites
+- Historical price storage and deal detection
+- Scheduled price checks at `08:00` and `20:00`
+- Manual checks through `/product-check` and `/product-check-all`
+- Discount percentage capture when a site exposes old price vs current price
+- Subscription-aware limits for channels, categories, and products
+
+## Supported Scrapers
+
+- `worten.pt`
+- `idealista.pt`
+- `pcdiga.com`
+
+## User-Facing Commands
 
 ```text
 /help
 /product-add
 /product-list
 /product-delete
+/product-check
+/product-check-all
 /category-create
 /category-list
 /category-delete
@@ -35,48 +49,79 @@ The bot is designed for multi-server use, with all data scoped by Discord guild.
 /category-channel-list
 ```
 
-## Stack
+## Architecture
 
-- `.NET 10`
-- `NetCord`
-- `Entity Framework Core`
-- `Npgsql`
-- `Supabase Postgres`
+ScrapWars is split into small workers that communicate through RabbitMQ events:
+
+1. `ScrapWars.Worker`
+   - hosts the Discord bot
+   - registers slash commands
+   - stores guild/product/category configuration
+   - publishes price-check requests
+
+2. `ScrapWars.Scraper.Worker`
+   - consumes price-check requests
+   - selects the correct site scraper by product URL
+   - uses Playwright to fetch the latest product price
+   - publishes scraped price events
+
+3. `ScrapWars.PriceAnalysis.Worker`
+   - stores price history
+   - compares the new price against previous history
+   - detects deals and super deals
+   - publishes deal events
+
+4. `ScrapWars.Notifications.Worker`
+   - resolves the target Discord channels for the product category
+   - sends the notification message
+
+## Event Flow
+
+```text
+Discord command / scheduler
+        ->
+ProductPriceCheckRequestedEvent
+        ->
+Scraper worker
+        ->
+ProductPriceScrapedEvent
+        ->
+Price analysis worker
+        ->
+ProductDealDetectedEvent
+        ->
+Notifications worker
+        ->
+Discord channel message
+```
 
 ## Project Structure
 
 ```text
-ScrapWars.Domain/          Core entities and plan definitions
-ScrapWars.Application/     Service contracts and DTOs
-ScrapWars.Infrastructure/  NetCord commands, services, EF persistence, migrations
-ScrapWars.Worker/          Host startup and worker entry point
+ScrapWars.Domain/                 Core entities and business primitives
+ScrapWars.Application/            Contracts, interfaces, shared DTOs
+ScrapWars.Contracts/              RabbitMQ event contracts shared by workers
+ScrapWars.Infrastructure/         Discord modules, EF persistence, services, publishers
+ScrapWars.Worker/                 Discord bot host and scheduled check worker
+ScrapWars.Scraper.Worker/         Playwright scraping pipeline
+ScrapWars.PriceAnalysis.Worker/   Price history persistence and deal analysis
+ScrapWars.Notifications.Worker/   Discord notification delivery
 ```
 
-## Local Setup
+## Technical Highlights
 
-Set secrets locally:
+- `PlaywrightBrowserProvider` keeps browser lifecycle centralized for scraper reuse
+- Site selection is resolved through a scraper registry keyed by URL host
+- Historical reads and writes are split so the bot can query the latest known price without owning the analysis workflow
+- `/product-check-all` now compares the last stored price against the fresh result returned by the async pipeline
+- Docker Compose orchestration brings up the bot and all background workers as one system
 
-```powershell
-dotnet user-secrets set "Discord:Token" "YOUR_BOT_TOKEN" --project ScrapWars.Worker
-dotnet user-secrets set "Discord:GuildId" "YOUR_TEST_GUILD_ID" --project ScrapWars.Worker
-dotnet user-secrets set "ConnectionStrings:Supabase" "Host=YOUR_HOST;Port=5432;Database=postgres;Username=postgres;Password=YOUR_PASSWORD;SSL Mode=Require;Trust Server Certificate=true" --project ScrapWars.Worker
-```
+## Main Stack
 
-Apply migrations:
-
-```powershell
-dotnet ef database update --project ScrapWars.Infrastructure --startup-project ScrapWars.Worker --context ScrapWarsDbContext
-```
-
-Build and run:
-
-```powershell
-dotnet build -c Release
-dotnet run --project ScrapWars.Worker -c Release
-```
-
-## Notes
-
-- `Discord:GuildId` is optional, but useful during development because guild command registration updates faster than global registration.
-- Real secrets should stay out of source control.
-- The repository also includes more detailed setup notes in [QUICK_START.md](QUICK_START.md) and [DISCORD_BOT_DOCUMENTATION.md](DISCORD_BOT_DOCUMENTATION.md).
+- `.NET 10`
+- `NetCord`
+- `RabbitMQ`
+- `Playwright`
+- `Entity Framework Core`
+- `PostgreSQL / Supabase`
+- `Docker Compose`
