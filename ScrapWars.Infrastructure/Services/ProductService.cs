@@ -50,6 +50,7 @@ public class ProductService : IProductService
         await _guildSubscriptionService.EnsureProductCapacityAsync(guildId);
 
         var product = new Product(trimmedName, trimmedLink, guildId, category.Id);
+        product.Category = category;
 
         _dbContext.Products.Add(product);
 
@@ -73,6 +74,30 @@ public class ProductService : IProductService
             .Where(product => product.GuildId == guildId)
             .OrderBy(product => product.Name)
             .ToArrayAsync();
+    }
+
+    public async Task<IReadOnlyCollection<Product>> GetAllProductsAsync()
+    {
+        return await _dbContext.Products
+            .AsNoTracking()
+            .Include(product => product.Category)
+            .OrderBy(product => product.GuildId)
+            .ThenBy(product => product.Name)
+            .ToArrayAsync();
+    }
+
+    public async Task<Product?> GetProductByNameAsync(string name, ulong guildId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var normalizedName = name.Trim().ToLowerInvariant();
+
+        return await _dbContext.Products
+            .AsNoTracking()
+            .Include(product => product.Category)
+            .FirstOrDefaultAsync(product =>
+                product.GuildId == guildId &&
+                product.Name.ToLower() == normalizedName);
     }
 
     public async Task<bool> DeleteProductAsync(string name, ulong guildId)
