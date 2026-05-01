@@ -4,7 +4,7 @@ namespace ScrapWars.Application.Interfaces;
 
 public interface IProductService
 {
-    Task<Product> AddProductAsync(string name, string link, ulong guildId);
+    Task<Product> AddProductAsync(string name, string link, string categoryName, ulong guildId);
     Task<IReadOnlyCollection<Product>> GetProductsAsync(ulong guildId);
     Task<bool> DeleteProductAsync(string name, ulong guildId);
 }

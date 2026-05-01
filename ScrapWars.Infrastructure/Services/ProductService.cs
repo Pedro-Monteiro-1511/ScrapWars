@@ -1,66 +1,97 @@
+using Microsoft.EntityFrameworkCore;
 using ScrapWars.Application.Interfaces;
 using ScrapWars.Domain.Entities;
+using ScrapWars.Infrastructure.Persistence;
 
 namespace ScrapWars.Infrastructure.Services;
 
 public class ProductService : IProductService
 {
-    private readonly List<Product> _products = [];
-    private readonly object _lock = new();
+    private readonly ScrapWarsDbContext _dbContext;
+    private readonly IGuildSubscriptionService _guildSubscriptionService;
 
-    public Task<Product> AddProductAsync(string name, string link, ulong guildId)
+    public ProductService(
+        ScrapWarsDbContext dbContext,
+        IGuildSubscriptionService guildSubscriptionService)
+    {
+        _dbContext = dbContext;
+        _guildSubscriptionService = guildSubscriptionService;
+    }
+
+    public async Task<Product> AddProductAsync(string name, string link, string categoryName, ulong guildId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(link);
+        ArgumentException.ThrowIfNullOrWhiteSpace(categoryName);
 
-        lock (_lock)
+        var trimmedName = name.Trim();
+        var trimmedLink = link.Trim();
+        var normalizedName = trimmedName.ToLowerInvariant();
+        var normalizedCategoryName = ProductCategory.NormalizeName(categoryName);
+
+        var category = await _dbContext.ProductCategories.FirstOrDefaultAsync(category =>
+            category.GuildId == guildId &&
+            category.NormalizedName == normalizedCategoryName);
+
+        if (category is null)
         {
-            var existingProduct = _products.Any(product =>
-                product.GuildId == guildId &&
-                string.Equals(product.Name, name, StringComparison.OrdinalIgnoreCase));
-
-            if (existingProduct)
-            {
-                throw new InvalidOperationException($"Product '{name}' already exists in this server.");
-            }
-
-            var product = new Product(name.Trim(), link.Trim(), guildId);
-            _products.Add(product);
-
-            return Task.FromResult(product);
+            throw new InvalidOperationException($"Category '{categoryName.Trim()}' does not exist in this server.");
         }
+
+        var existingProduct = await _dbContext.Products.AnyAsync(product =>
+            product.GuildId == guildId &&
+            product.Name.ToLower() == normalizedName);
+
+        if (existingProduct)
+        {
+            throw new InvalidOperationException($"Product '{trimmedName}' already exists in this server.");
+        }
+
+        await _guildSubscriptionService.EnsureProductCapacityAsync(guildId);
+
+        var product = new Product(trimmedName, trimmedLink, guildId, category.Id);
+
+        _dbContext.Products.Add(product);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("UX_products_guild_id_name_lower", StringComparison.Ordinal) == true)
+        {
+            throw new InvalidOperationException($"Product '{trimmedName}' already exists in this server.", ex);
+        }
+
+        return product;
     }
 
-    public Task<IReadOnlyCollection<Product>> GetProductsAsync(ulong guildId)
+    public async Task<IReadOnlyCollection<Product>> GetProductsAsync(ulong guildId)
     {
-        lock (_lock)
-        {
-            var products = _products
-                .Where(product => product.GuildId == guildId)
-                .OrderBy(product => product.Name)
-                .ToArray();
-
-            return Task.FromResult<IReadOnlyCollection<Product>>(products);
-        }
+        return await _dbContext.Products
+            .AsNoTracking()
+            .Include(product => product.Category)
+            .Where(product => product.GuildId == guildId)
+            .OrderBy(product => product.Name)
+            .ToArrayAsync();
     }
 
-    public Task<bool> DeleteProductAsync(string name, ulong guildId)
+    public async Task<bool> DeleteProductAsync(string name, ulong guildId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        lock (_lock)
+        var normalizedName = name.Trim().ToLowerInvariant();
+        var product = await _dbContext.Products.FirstOrDefaultAsync(product =>
+            product.GuildId == guildId &&
+            product.Name.ToLower() == normalizedName);
+
+        if (product is null)
         {
-            var product = _products.FirstOrDefault(product =>
-                product.GuildId == guildId &&
-                string.Equals(product.Name, name, StringComparison.OrdinalIgnoreCase));
-
-            if (product is null)
-            {
-                return Task.FromResult(false);
-            }
-
-            _products.Remove(product);
-            return Task.FromResult(true);
+            return false;
         }
+
+        _dbContext.Products.Remove(product);
+        await _dbContext.SaveChangesAsync();
+
+        return true;
     }
 }

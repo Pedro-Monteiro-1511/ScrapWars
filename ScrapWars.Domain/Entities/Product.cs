@@ -8,8 +8,10 @@ public class Product
     public string Name { get; set; }
     public string Link { get; set; }
     public ulong GuildId { get; set; }
+    public Guid? CategoryId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public ProductCategory? Category { get; set; }
 
     public Product()
     {
@@ -20,10 +22,11 @@ public class Product
         GuildId = 0;
     }
 
-    public Product(string name, string link, ulong guildId) : this()
+    public Product(string name, string link, ulong guildId, Guid categoryId) : this()
     {
         Name = name;
         Link = link;
         GuildId = guildId;
+        CategoryId = categoryId;
     }
 }

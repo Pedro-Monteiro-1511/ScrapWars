@@ -15,7 +15,8 @@ public class ProductModule : ApplicationCommandModule<ApplicationCommandContext>
     [SlashCommand("product-add", "Add a product link to this server")]
     public async Task<string> AddProductAsync(
         [SlashCommandParameter(Name = "name", Description = "Name of the product")] string name,
-        [SlashCommandParameter(Name = "link", Description = "Link to the product")] string link)
+        [SlashCommandParameter(Name = "link", Description = "Link to the product")] string link,
+        [SlashCommandParameter(Name = "category", Description = "Configured category for this product")] string category)
     {
         if (!TryGetGuildId(out var guildId, out var error))
         {
@@ -24,9 +25,9 @@ public class ProductModule : ApplicationCommandModule<ApplicationCommandContext>
 
         try
         {
-            var product = await _productService.AddProductAsync(name, link, guildId);
+            var product = await _productService.AddProductAsync(name, link, category, guildId);
 
-            return $"Product added: {product.Name} - {product.Link}";
+            return $"Product added: {product.Name} [{category.Trim()}] - {product.Link}";
         }
         catch (InvalidOperationException ex)
         {
@@ -51,7 +52,7 @@ public class ProductModule : ApplicationCommandModule<ApplicationCommandContext>
 
         var productLines = products
             .Take(10)
-            .Select(product => $"- {product.Name}: {product.Link}");
+            .Select(product => $"- {product.Name} [{product.Category?.Name ?? "uncategorized"}]: {product.Link}");
 
         var suffix = products.Count > 10
             ? $"{Environment.NewLine}Showing 10 of {products.Count} products."

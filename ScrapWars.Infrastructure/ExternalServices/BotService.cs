@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NetCord;
 using NetCord.Gateway;
@@ -14,18 +15,18 @@ public class BotService : IBotService
     private readonly ILogger<BotService> _logger;
     private readonly ApplicationCommandService<ApplicationCommandContext> _commandService;
     private readonly IConfiguration _configuration;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
 
     public BotService(
         ILogger<BotService> logger,
         ApplicationCommandService<ApplicationCommandContext> commandService,
         IConfiguration configuration,
-        IServiceProvider serviceProvider)
+        IServiceScopeFactory serviceScopeFactory)
     {
         _logger = logger;
         _commandService = commandService;
         _configuration = configuration;
-        _serviceProvider = serviceProvider;
+        _serviceScopeFactory = serviceScopeFactory;
     }
 
     public async Task StartAsync(string token, CancellationToken cancellationToken)
@@ -58,8 +59,9 @@ public class BotService : IBotService
                     return;
 
                 var context = new ApplicationCommandContext(cmd, _client);
+                using var scope = _serviceScopeFactory.CreateScope();
 
-                await _commandService.ExecuteAsync(context, _serviceProvider);
+                await _commandService.ExecuteAsync(context, scope.ServiceProvider);
             };
 
             _logger.LogInformation("Iniciando Discord Bot...");
