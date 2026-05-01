@@ -1,6 +1,10 @@
 <Solution>
   <Project Path="ScrapWars.Application/ScrapWars.Application.csproj" />
+  <Project Path="ScrapWars.Contracts/ScrapWars.Contracts.csproj" />
   <Project Path="ScrapWars.Domain/ScrapWars.Domain.csproj" />
   <Project Path="ScrapWars.Infrastructure/ScrapWars.Infrastructure.csproj" />
+  <Project Path="ScrapWars.Notifications.Worker/ScrapWars.Notifications.Worker.csproj" />
+  <Project Path="ScrapWars.PriceAnalysis.Worker/ScrapWars.PriceAnalysis.Worker.csproj" />
+  <Project Path="ScrapWars.Scraper.Worker/ScrapWars.Scraper.Worker.csproj" />
   <Project Path="ScrapWars.Worker/ScrapWars.Worker.csproj" />
 </Solution>

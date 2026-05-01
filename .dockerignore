@@ -1,0 +1,14 @@
+.git
+.vs
+.idea
+.vscode
+**/bin
+**/obj
+.dotnet
+*.user
+*.suo
+*.rsuser
+Dockerfile*
+!ScrapWars.Scraper.Worker/Dockerfile
+!ScrapWars.PriceAnalysis.Worker/Dockerfile
+!ScrapWars.Notifications.Worker/Dockerfile

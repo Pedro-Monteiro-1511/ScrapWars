@@ -61,7 +61,21 @@ public class BotService : IBotService
                 var context = new ApplicationCommandContext(cmd, _client);
                 using var scope = _serviceScopeFactory.CreateScope();
 
-                await _commandService.ExecuteAsync(context, scope.ServiceProvider);
+                try
+                {
+                    await _commandService.ExecuteAsync(context, scope.ServiceProvider);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Erro ao executar o comando '{CommandName}'.", cmd.Data.Name);
+
+                    await cmd.SendResponseAsync(InteractionCallback.Message(
+                        new InteractionMessageProperties
+                        {
+                            Content = "Ocorreu um erro a processar este comando.",
+                            Flags = MessageFlags.Ephemeral
+                        }));
+                }
             };
 
             _logger.LogInformation("Iniciando Discord Bot...");
