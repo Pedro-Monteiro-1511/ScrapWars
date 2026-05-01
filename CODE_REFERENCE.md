@@ -51,19 +51,44 @@ public interface IProductService
 
 `ScrapWars.Infrastructure/Commands/ProductModule.cs`
 
-- `/product-add`: creates a product in the current guild.
+- `/product-add`: creates a product in the current guild under a configured category.
 - `/product-list`: lists products in the current guild.
 - `/product-delete`: deletes a product by name from the current guild.
 
-`ScrapWars.Infrastructure/Commands/ChannelModule.cs`
+`ScrapWars.Infrastructure/Commands/ConfigurationModule.cs`
 
-- `/channel-register`: accepts a Discord channel and returns a confirmation. Persistence is still a future step.
+- `/category-create`: creates a guild-scoped category.
+- `/category-list`: lists guild-scoped categories.
+- `/category-delete`: deletes an empty guild-scoped category.
+- `/category-channel-add`: routes category notifications to a Discord channel.
+- `/category-channel-remove`: removes a category/channel route.
+- `/category-channel-list`: lists category notification channels.
 
 `ScrapWars.Infrastructure/Services/ProductService.cs`
 
-- Stores products in memory.
+- Stores products in Supabase Postgres through `ScrapWarsDbContext`.
 - Prevents duplicate product names in the same guild.
-- Uses a lock around the backing list because the service is a singleton.
+- Requires product adds to reference an existing guild category.
+- Reads and writes products with EF Core async queries.
+
+`ScrapWars.Infrastructure/Services/GuildConfigurationService.cs`
+
+- Manages guild-scoped product categories.
+- Manages category-to-channel notification routes.
+- Prevents duplicate category names per guild.
+- Prevents duplicate channel routes per category.
+
+`ScrapWars.Infrastructure/Persistence/ScrapWarsDbContext.cs`
+
+- Maps `Product` to the `products` table.
+- Maps `ProductCategory` to the `product_categories` table.
+- Maps `CategoryNotificationChannel` to the `category_notification_channels` table.
+- Stores Discord guild IDs as `numeric(20,0)` for safe unsigned 64-bit values.
+- Adds guild lookup indexes and uniqueness constraints.
+
+`ScrapWars.Infrastructure/Persistence/Migrations/`
+
+- Contains the initial EF Core migration for Supabase/Postgres.
 
 ## Worker
 
@@ -72,7 +97,9 @@ public interface IProductService
 Registers:
 
 - `ApplicationCommandService<ApplicationCommandContext>`
-- `IProductService -> ProductService`
+- `ScrapWarsDbContext`
+- `IGuildConfigurationService -> GuildConfigurationService` as a scoped service
+- `IProductService -> ProductService` as a scoped service
 - `IBotService -> BotService`
 - `Worker`
 
