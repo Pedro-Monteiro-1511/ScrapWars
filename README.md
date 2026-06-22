@@ -1,38 +1,40 @@
 # ScrapWars
 
-ScrapWars is a Discord-based price monitoring system built as a portfolio project around event-driven architecture in `.NET`.
+ScrapWars is a distributed Discord bot for product price monitoring.
 
-The project tracks products across multiple websites, stores price history, detects deals automatically, and routes notifications to Discord channels by category and guild.
+The system tracks product URLs from multiple websites, scrapes current prices, stores historical data, detects deals, and routes notifications to Discord channels based on category and guild configuration.
 
-## Why This Project Exists
+## Purpose
 
-This repository is meant to show:
+This project was built as a portfolio piece to demonstrate:
 
-- practical multi-project `.NET` architecture
-- Discord slash-command integration with `NetCord`
-- message-driven workflows with `RabbitMQ`
-- scraping with `Playwright`
-- persistence with `EF Core` and `PostgreSQL`
-- separation of concerns between command handling, scraping, analysis, and notifications
+- multi-project `.NET` architecture
+- event-driven backend design
+- browser automation with `Playwright`
+- asynchronous processing with `RabbitMQ`
+- relational persistence with `EF Core` and `PostgreSQL`
+- Discord bot integration with `NetCord`
 
-## Core Features
+## What The System Does
 
-- Guild-scoped product tracking
-- Category-based routing of notifications
-- Price scraping across multiple supported sites
-- Historical price storage and deal detection
-- Scheduled price checks at `08:00` and `20:00`
-- Manual checks through `/product-check` and `/product-check-all`
-- Discount percentage capture when a site exposes old price vs current price
-- Subscription-aware limits for channels, categories, and products
+- stores tracked products per Discord guild
+- groups products by configurable categories
+- maps categories to notification channels
+- queues manual price checks through slash commands
+- runs scheduled price checks twice per day
+- scrapes supported websites with site-specific handlers
+- stores price history for each product
+- calculates discount percentage when the source exposes prior price data
+- detects deals from historical comparisons
+- sends Discord notifications when a deal is found
 
-## Supported Scrapers
+## Supported Sources
 
 - `worten.pt`
 - `idealista.pt`
 - `pcdiga.com`
 
-## User-Facing Commands
+## Commands
 
 ```text
 /help
@@ -51,34 +53,52 @@ This repository is meant to show:
 
 ## Architecture
 
-ScrapWars is split into small workers that communicate through RabbitMQ events:
+ScrapWars is split into independent workers connected through RabbitMQ:
 
-1. `ScrapWars.Worker`
-   - hosts the Discord bot
-   - registers slash commands
-   - stores guild/product/category configuration
-   - publishes price-check requests
+### `ScrapWars.Worker`
 
-2. `ScrapWars.Scraper.Worker`
-   - consumes price-check requests
-   - selects the correct site scraper by product URL
-   - uses Playwright to fetch the latest product price
-   - publishes scraped price events
+Main Discord bot host.
 
-3. `ScrapWars.PriceAnalysis.Worker`
-   - stores price history
-   - compares the new price against previous history
-   - detects deals and super deals
-   - publishes deal events
+Responsibilities:
+- registers slash commands
+- manages guild-scoped product and category data
+- publishes price-check requests
+- schedules automatic checks at `08:00` and `20:00`
 
-4. `ScrapWars.Notifications.Worker`
-   - resolves the target Discord channels for the product category
-   - sends the notification message
+### `ScrapWars.Scraper.Worker`
 
-## Event Flow
+Scraping pipeline.
+
+Responsibilities:
+- consumes price-check requests
+- resolves the correct scraper by URL host
+- launches Playwright browser contexts
+- extracts current price, business type, currency, and discount percentage
+- publishes normalized scrape results
+
+### `ScrapWars.PriceAnalysis.Worker`
+
+Historical analysis pipeline.
+
+Responsibilities:
+- stores every scraped price in `product_price_history`
+- compares the latest value with previous records
+- detects regular deals and super deals
+- publishes deal events for downstream consumers
+
+### `ScrapWars.Notifications.Worker`
+
+Notification delivery pipeline.
+
+Responsibilities:
+- resolves Discord channels configured for the product category
+- formats deal messages
+- sends notifications to Discord
+
+## How The Pieces Connect
 
 ```text
-Discord command / scheduler
+Discord command / scheduled worker
         ->
 ProductPriceCheckRequestedEvent
         ->
@@ -95,28 +115,31 @@ Notifications worker
 Discord channel message
 ```
 
+This split keeps scraping, persistence, analysis, and delivery isolated from the command layer. Each stage has a narrow responsibility and communicates through explicit event contracts.
+
 ## Project Structure
 
 ```text
-ScrapWars.Domain/                 Core entities and business primitives
-ScrapWars.Application/            Contracts, interfaces, shared DTOs
-ScrapWars.Contracts/              RabbitMQ event contracts shared by workers
-ScrapWars.Infrastructure/         Discord modules, EF persistence, services, publishers
-ScrapWars.Worker/                 Discord bot host and scheduled check worker
-ScrapWars.Scraper.Worker/         Playwright scraping pipeline
-ScrapWars.PriceAnalysis.Worker/   Price history persistence and deal analysis
-ScrapWars.Notifications.Worker/   Discord notification delivery
+ScrapWars.Domain/                 Core entities and business rules
+ScrapWars.Application/            Interfaces and shared DTOs
+ScrapWars.Contracts/              Integration event contracts
+ScrapWars.Infrastructure/         Discord modules, persistence, services, publishers
+ScrapWars.Worker/                 Discord bot host and scheduling
+ScrapWars.Scraper.Worker/         Playwright-based scraping workers
+ScrapWars.PriceAnalysis.Worker/   Price history and deal analysis
+ScrapWars.Notifications.Worker/   Notification routing and Discord delivery
 ```
 
-## Technical Highlights
+## Technical Notes
 
-- `PlaywrightBrowserProvider` keeps browser lifecycle centralized for scraper reuse
-- Site selection is resolved through a scraper registry keyed by URL host
-- Historical reads and writes are split so the bot can query the latest known price without owning the analysis workflow
-- `/product-check-all` now compares the last stored price against the fresh result returned by the async pipeline
-- Docker Compose orchestration brings up the bot and all background workers as one system
+- Scraper selection is handled through a registry keyed by product host.
+- Each site scraper is isolated behind a common `ISiteScraper` contract.
+- Price history is written by the analysis worker and read by the bot through a dedicated read model.
+- `/product-check-all` compares the previously stored price with the fresh value returned by the asynchronous pipeline.
+- Discount percentage is propagated across scraping, persistence, analysis, and notification layers.
+- Docker Compose is used to run the bot and all workers as one distributed system.
 
-## Main Stack
+## Stack
 
 - `.NET 10`
 - `NetCord`
